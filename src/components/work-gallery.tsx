@@ -2,15 +2,40 @@
 
 import * as React from "react";
 import Image from "next/image";
+import JSZip from "jszip";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronRight, Download, ImageIcon, ZoomIn, ZoomOut } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  FolderDown,
+  ImageIcon,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+function safeFileName(title: string) {
+  return title.replace(/[^\p{L}\p{N}_-]+/gu, "_");
+}
+
+function triggerDownload(blob: Blob, filename: string) {
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
 export function WorkGallery({ images, title }: { images: string[]; title: string }) {
   const [openIndex, setOpenIndex] = React.useState<number | null>(null);
   const [zoomed, setZoomed] = React.useState(false);
+  const [downloadingAll, setDownloadingAll] = React.useState(false);
 
   if (images.length === 0) {
     return (
@@ -40,22 +65,44 @@ export function WorkGallery({ images, title }: { images: string[]; title: string
     try {
       const response = await fetch(url);
       const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
       const extension = blob.type.split("/")[1] ?? "jpg";
-      const link = document.createElement("a");
-      link.href = objectUrl;
-      link.download = `${title.replace(/[^\p{L}\p{N}_-]+/gu, "_")}_${index + 1}.${extension}`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(objectUrl);
+      triggerDownload(blob, `${safeFileName(title)}_${index + 1}.${extension}`);
     } catch {
       toast.error("Не удалось скачать фото");
     }
   }
 
+  async function downloadAll() {
+    setDownloadingAll(true);
+    try {
+      const zip = new JSZip();
+      await Promise.all(
+        images.map(async (url, index) => {
+          const response = await fetch(url);
+          const blob = await response.blob();
+          const extension = blob.type.split("/")[1] ?? "jpg";
+          zip.file(`${index + 1}.${extension}`, blob);
+        })
+      );
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      triggerDownload(zipBlob, `${safeFileName(title)}.zip`);
+    } catch {
+      toast.error("Не удалось скачать фото");
+    } finally {
+      setDownloadingAll(false);
+    }
+  }
+
   return (
     <>
+      {images.length > 1 ? (
+        <div className="mb-2 flex justify-end">
+          <Button variant="outline" size="sm" onClick={downloadAll} disabled={downloadingAll}>
+            <FolderDown className="h-4 w-4" />
+            {downloadingAll ? "Собираю архив..." : "Скачать все фото"}
+          </Button>
+        </div>
+      ) : null}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {images.map((src, index) => (
           <button

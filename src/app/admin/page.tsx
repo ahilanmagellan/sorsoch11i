@@ -4,6 +4,8 @@ import { WorksTable } from "@/components/admin/works-table";
 import { LogoutButton } from "@/components/admin/logout-button";
 import { getWorks } from "@/lib/works";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminPage() {
   const works = await getWorks({});
 
