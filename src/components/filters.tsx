@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { RotateCcw } from "lucide-react";
+import { Check, RotateCcw } from "lucide-react";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { QUARTERS, SUBJECTS, WORK_TYPES } from "@/lib/constants";
@@ -14,23 +14,31 @@ export function Filters() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const subject = searchParams.get("subject") ?? "";
-  const quarter = searchParams.get("quarter") ?? "";
-  const workType = searchParams.get("work_type") ?? "";
+  const appliedSubject = searchParams.get("subject") ?? "";
+  const appliedQuarter = searchParams.get("quarter") ?? "";
+  const appliedWorkType = searchParams.get("work_type") ?? "";
 
-  const hasActiveFilters = subject || quarter || workType;
+  const [subject, setSubject] = React.useState(appliedSubject);
+  const [quarter, setQuarter] = React.useState(appliedQuarter);
+  const [workType, setWorkType] = React.useState(appliedWorkType);
 
-  function updateParam(key: string, value: string) {
-    const params = new URLSearchParams(searchParams.toString());
-    if (value) {
-      params.set(key, value);
-    } else {
-      params.delete(key);
-    }
-    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  const hasAppliedFilters = Boolean(appliedSubject || appliedQuarter || appliedWorkType);
+  const hasPendingChanges =
+    subject !== appliedSubject || quarter !== appliedQuarter || workType !== appliedWorkType;
+
+  function applyFilters() {
+    const params = new URLSearchParams();
+    if (subject) params.set("subject", subject);
+    if (quarter) params.set("quarter", quarter);
+    if (workType) params.set("work_type", workType);
+    const query = params.toString();
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
   }
 
-  function resetFilters() {
+  function clearFilters() {
+    setSubject("");
+    setQuarter("");
+    setWorkType("");
     router.push(pathname, { scroll: false });
   }
 
@@ -41,7 +49,7 @@ export function Filters() {
           <label className="mb-1 block text-xs font-medium text-neutral-500 dark:text-neutral-400">
             Предмет
           </label>
-          <Select value={subject} onChange={(e) => updateParam("subject", e.target.value)}>
+          <Select value={subject} onChange={(e) => setSubject(e.target.value)}>
             <option value="">Все предметы</option>
             {SUBJECTS.map((s) => (
               <option key={s} value={s}>
@@ -55,7 +63,7 @@ export function Filters() {
           <label className="mb-1 block text-xs font-medium text-neutral-500 dark:text-neutral-400">
             Четверть
           </label>
-          <Select value={quarter} onChange={(e) => updateParam("quarter", e.target.value)}>
+          <Select value={quarter} onChange={(e) => setQuarter(e.target.value)}>
             <option value="">Все четверти</option>
             {QUARTERS.map((q) => (
               <option key={q} value={q}>
@@ -69,7 +77,7 @@ export function Filters() {
           <label className="mb-1 block text-xs font-medium text-neutral-500 dark:text-neutral-400">
             Тип работы
           </label>
-          <Select value={workType} onChange={(e) => updateParam("work_type", e.target.value)}>
+          <Select value={workType} onChange={(e) => setWorkType(e.target.value)}>
             <option value="">Все типы</option>
             {WORK_TYPES.map((t) => (
               <option key={t} value={t}>
@@ -80,11 +88,18 @@ export function Filters() {
         </div>
       </div>
 
-      {hasActiveFilters ? (
+      {hasPendingChanges ? (
         <div className="mt-3 flex justify-end">
-          <Button variant="ghost" size="sm" onClick={resetFilters}>
+          <Button size="sm" onClick={applyFilters}>
+            <Check className="h-3.5 w-3.5" />
+            Применить фильтры
+          </Button>
+        </div>
+      ) : hasAppliedFilters ? (
+        <div className="mt-3 flex justify-end">
+          <Button variant="ghost" size="sm" onClick={clearFilters}>
             <RotateCcw className="h-3.5 w-3.5" />
-            Сбросить фильтры
+            Очистить фильтры
           </Button>
         </div>
       ) : null}
