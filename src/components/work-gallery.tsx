@@ -32,6 +32,41 @@ function triggerDownload(blob: Blob, filename: string) {
   URL.revokeObjectURL(objectUrl);
 }
 
+async function fetchAsFile(url: string, baseName: string): Promise<File> {
+  const response = await fetch(url);
+  const blob = await response.blob();
+  const extension = blob.type.split("/")[1] ?? "jpg";
+  return new File([blob], `${baseName}.${extension}`, { type: blob.type || "image/jpeg" });
+}
+
+/**
+ * On phones, the only way a website can hand photos to the OS's own gallery
+ * is via the native share sheet (Web Share API) — there is no way to write
+ * to the camera roll directly. Desktops have no such share sheet or gallery,
+ * so there we fall back to a normal file download (zip when there's more
+ * than one photo).
+ */
+async function shareOrDownload(files: File[], zipName: string) {
+  if (typeof navigator !== "undefined" && navigator.canShare?.({ files })) {
+    try {
+      await navigator.share({ files });
+      return;
+    } catch (err) {
+      if ((err as Error)?.name === "AbortError") return;
+      // fall through to the download fallback below
+    }
+  }
+
+  if (files.length === 1) {
+    triggerDownload(files[0], files[0].name);
+  } else {
+    const zip = new JSZip();
+    files.forEach((file) => zip.file(file.name, file));
+    const zipBlob = await zip.generateAsync({ type: "blob" });
+    triggerDownload(zipBlob, zipName);
+  }
+}
+
 export function WorkGallery({ images, title }: { images: string[]; title: string }) {
   const [openIndex, setOpenIndex] = React.useState<number | null>(null);
   const [zoomed, setZoomed] = React.useState(false);
@@ -63,10 +98,8 @@ export function WorkGallery({ images, title }: { images: string[]; title: string
 
   async function downloadImage(url: string, index: number) {
     try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const extension = blob.type.split("/")[1] ?? "jpg";
-      triggerDownload(blob, `${safeFileName(title)}_${index + 1}.${extension}`);
+      const file = await fetchAsFile(url, `${safeFileName(title)}_${index + 1}`);
+      await shareOrDownload([file], file.name);
     } catch {
       toast.error("Не удалось скачать фото");
     }
@@ -75,17 +108,8 @@ export function WorkGallery({ images, title }: { images: string[]; title: string
   async function downloadAll() {
     setDownloadingAll(true);
     try {
-      const zip = new JSZip();
-      await Promise.all(
-        images.map(async (url, index) => {
-          const response = await fetch(url);
-          const blob = await response.blob();
-          const extension = blob.type.split("/")[1] ?? "jpg";
-          zip.file(`${index + 1}.${extension}`, blob);
-        })
-      );
-      const zipBlob = await zip.generateAsync({ type: "blob" });
-      triggerDownload(zipBlob, `${safeFileName(title)}.zip`);
+      const files = await Promise.all(images.map((url, index) => fetchAsFile(url, `${index + 1}`)));
+      await shareOrDownload(files, `${safeFileName(title)}.zip`);
     } catch {
       toast.error("Не удалось скачать фото");
     } finally {
