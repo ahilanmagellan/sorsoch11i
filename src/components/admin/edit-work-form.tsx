@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { updateWorkAction } from "@/app/admin/actions";
+import { createAdminCommentAction } from "@/app/work/[id]/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -34,14 +35,26 @@ export function EditWorkForm({ work }: { work: Work }) {
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const formData = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const formData = new FormData(formElement);
+    const adminComment = String(formData.get("admin_comment") ?? "").trim();
     startTransition(async () => {
       const result = await updateWorkAction(work.id, formData);
       if (result.error) {
         toast.error(result.error);
         return;
       }
-      toast.success("Изменения сохранены");
+      if (adminComment) {
+        const commentResult = await createAdminCommentAction(work.id, adminComment);
+        if (commentResult.error) {
+          toast.error(`Работа сохранена, но комментарий не добавлен: ${commentResult.error}`);
+          router.refresh();
+          return;
+        }
+        const commentField = formElement.elements.namedItem("admin_comment");
+        if (commentField instanceof HTMLTextAreaElement) commentField.value = "";
+      }
+      toast.success(adminComment ? "Изменения сохранены, комментарий администратора опубликован" : "Изменения сохранены");
       router.refresh();
     });
   }
@@ -71,6 +84,17 @@ export function EditWorkForm({ work }: { work: Work }) {
       <Field label="Название">
         <Input name="title" defaultValue={work.title} placeholder="Название работы" />
       </Field>
+
+      <label className="block">
+        <span className="mb-1 block text-xs font-medium text-neutral-500 dark:text-neutral-400">Комментарий администратора к работе</span>
+        <textarea
+          name="admin_comment"
+          rows={3}
+          maxLength={2000}
+          placeholder="Оставьте пояснение или объявление. Пустое поле не добавит комментарий."
+          className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+        />
+      </label>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Field label="Дата написания"><Input type="date" name="test_date" defaultValue={work.test_date?.slice(0, 10) ?? ""} /></Field>

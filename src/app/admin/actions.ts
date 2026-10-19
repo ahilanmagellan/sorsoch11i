@@ -178,7 +178,15 @@ export async function updateWorkAction(id: string, formData: FormData) {
     .select("image_urls, image_variants")
     .eq("id", id)
     .maybeSingle();
-  if (readError || !current) return { error: "Работа не найдена" };
+  if (readError) {
+    if (readError.code === "42703" || readError.message.includes("image_variants")) {
+      return {
+        error: "База данных ещё не обновлена для вариантов. Выполните SQL-миграцию supabase/variants.sql в Supabase → SQL Editor.",
+      };
+    }
+    return { error: `Не удалось проверить работу в базе данных: ${readError.message}` };
+  }
+  if (!current) return { error: "Работа не найдена" };
 
   const oldVariants: ImageVariant[] = Array.isArray(current.image_variants)
     ? (current.image_variants as unknown as ImageVariant[])

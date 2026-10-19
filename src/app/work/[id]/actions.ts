@@ -9,6 +9,16 @@ import { createServerClient } from "@/lib/supabase/server";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 type Vote = "like" | "dislike";
 
+function databaseError(error: { code?: string; message: string }) {
+  if (error.code === "PGRST205" || error.code === "PGRST204") {
+    return "Таблицы обсуждения не видны Supabase. Выполните supabase/discussion.sql в Supabase → SQL Editor.";
+  }
+  if (error.code === "42501") {
+    return "Supabase запретил запись. Повторно выполните supabase/discussion.sql в Supabase → SQL Editor.";
+  }
+  return `Ошибка базы данных${error.code ? ` (${error.code})` : ""}: ${error.message}`;
+}
+
 function validUuid(value: string) {
   return UUID_PATTERN.test(value);
 }
@@ -40,7 +50,7 @@ export async function createCommentAction(
     is_admin: admin,
   });
 
-  if (error) return { error: "Не удалось сохранить комментарий" };
+  if (error) return { error: databaseError(error) };
   revalidatePath(`/work/${workId}`);
   return { success: true };
 }
@@ -60,7 +70,7 @@ export async function setWorkVoteAction(
     ? await query.upsert({ work_id: workId, voter_id: voterId, vote }, { onConflict: "work_id,voter_id" })
     : await query.delete().eq("work_id", workId).eq("voter_id", voterId);
 
-  if (result.error) return { error: "Не удалось сохранить голос" };
+  if (result.error) return { error: databaseError(result.error) };
   revalidatePath(`/work/${workId}`);
   return {};
 }
@@ -86,7 +96,31 @@ export async function setCommentVoteAction(
     ? await query.upsert({ comment_id: commentId, voter_id: voterId, vote }, { onConflict: "comment_id,voter_id" })
     : await query.delete().eq("comment_id", commentId).eq("voter_id", voterId);
 
-  if (result.error) return { error: "Не удалось сохранить голос" };
+  if (result.error) return { error: databaseError(result.error) };
   revalidatePath(`/work/${workId}`);
   return {};
+}
+
+export async function createAdminCommentAction(
+  workId: string,
+  body: string
+): Promise<{ error?: string; success?: boolean }> {
+  if (!(await isAdmin())) return { error: "Требуется вход администратора" };
+  if (!validUuid(workId)) return { error: "Некорректная работа" };
+
+  const cleanBody = body.trim();
+  if (cleanBody.length < 1 || cleanBody.length > 2000) {
+    return { error: "Комментарий должен содержать от 1 до 2000 символов" };
+  }
+
+  const { error } = await createAdminClient().from("work_comments").insert({
+    work_id: workId,
+    author_name: "Администратор",
+    body: cleanBody,
+    is_admin: true,
+  });
+
+  if (error) return { error: databaseError(error) };
+  revalidatePath(`/work/${workId}`);
+  return { success: true };
 }

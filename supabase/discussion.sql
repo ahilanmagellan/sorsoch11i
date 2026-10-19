@@ -70,3 +70,6 @@ create policy "Public remove comment votes"
 grant select, insert on public.work_comments to anon, authenticated;
 grant select, insert, update, delete on public.work_votes to anon, authenticated;
 grant select, insert, update, delete on public.comment_votes to anon, authenticated;
+
+-- Make tables created above immediately visible to the Supabase Data API.
+notify pgrst, 'reload schema';
