@@ -9,9 +9,15 @@ export interface Work {
   work_type: WorkType | string;
   max_score: number | null;
   variants_count: number | null;
+  image_variants: ImageVariant[];
   test_date: string | null;
   image_urls: string[];
   created_at: string;
+}
+
+export interface ImageVariant {
+  variant: number;
+  image_urls: string[];
 }
 
 export interface WorkFilters {

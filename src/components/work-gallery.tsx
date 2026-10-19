@@ -16,6 +16,7 @@ import {
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { ImageVariant } from "@/lib/types";
 
 function safeFileName(title: string) {
   return title.replace(/[^\p{L}\p{N}_-]+/gu, "_");
@@ -67,7 +68,20 @@ async function shareOrDownload(files: File[], zipName: string) {
   }
 }
 
-export function WorkGallery({ images, title }: { images: string[]; title: string }) {
+export function WorkGallery({ variants, title }: { variants: ImageVariant[]; title: string }) {
+  return (
+    <div className="space-y-6">
+      {variants.map((item) => (
+        <section key={item.variant} className="space-y-2">
+          <h2 className="text-base font-semibold text-neutral-900 dark:text-neutral-100">Вариант {item.variant}</h2>
+          <VariantGallery images={item.image_urls} title={title} variant={item.variant} />
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function VariantGallery({ images, title, variant }: { images: string[]; title: string; variant: number }) {
   const [openIndex, setOpenIndex] = React.useState<number | null>(null);
   const [zoomed, setZoomed] = React.useState(false);
   const [downloadingAll, setDownloadingAll] = React.useState(false);
@@ -75,7 +89,10 @@ export function WorkGallery({ images, title }: { images: string[]; title: string
   if (images.length === 0) {
     return (
       <div className="flex aspect-[4/3] w-full items-center justify-center rounded-xl bg-neutral-100 text-neutral-300 dark:bg-neutral-800 dark:text-neutral-600">
-        <ImageIcon className="h-12 w-12" />
+        <div className="flex flex-col items-center gap-2">
+          <ImageIcon className="h-12 w-12" />
+          <span className="text-sm text-neutral-500">Для этого варианта фото пока нет</span>
+        </div>
       </div>
     );
   }
@@ -109,7 +126,7 @@ export function WorkGallery({ images, title }: { images: string[]; title: string
     setDownloadingAll(true);
     try {
       const files = await Promise.all(images.map((url, index) => fetchAsFile(url, `${index + 1}`)));
-      await shareOrDownload(files, `${safeFileName(title)}.zip`);
+      await shareOrDownload(files, `${safeFileName(title)}_variant_${variant}.zip`);
     } catch {
       toast.error("Не удалось скачать фото");
     } finally {
@@ -123,7 +140,7 @@ export function WorkGallery({ images, title }: { images: string[]; title: string
         <div className="mb-2 flex justify-end">
           <Button variant="outline" size="sm" onClick={downloadAll} disabled={downloadingAll}>
             <FolderDown className="h-4 w-4" />
-            {downloadingAll ? "Собираю архив..." : "Скачать все фото"}
+            {downloadingAll ? "Собираю архив..." : `Скачать фото варианта ${variant}`}
           </Button>
         </div>
       ) : null}
@@ -137,7 +154,7 @@ export function WorkGallery({ images, title }: { images: string[]; title: string
           >
             <Image
               src={src}
-              alt={`${title} — фото ${index + 1}`}
+              alt={`${title} — вариант ${variant}, фото ${index + 1}`}
               fill
               sizes="(max-width: 640px) 50vw, 33vw"
               className="object-cover transition-transform duration-200 group-hover:scale-105"

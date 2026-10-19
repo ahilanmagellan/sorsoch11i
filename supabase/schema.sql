@@ -14,8 +14,15 @@ create table if not exists works (
   variants_count integer,
   test_date date,
   image_urls text[] not null default '{}',
+  image_variants jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now()
 );
+
+alter table works add column if not exists image_variants jsonb not null default '[]'::jsonb;
+
+update works
+set image_variants = jsonb_build_array(jsonb_build_object('variant', 1, 'image_urls', to_jsonb(image_urls)))
+where jsonb_array_length(image_variants) = 0 and cardinality(image_urls) > 0;
 
 create index if not exists works_subject_idx on works (subject);
 create index if not exists works_grade_idx on works (grade);
@@ -44,3 +51,6 @@ drop policy if exists "Public read work photos" on storage.objects;
 create policy "Public read work photos"
   on storage.objects for select
   using (bucket_id = 'work-photos');
+
+-- Комментарии и реакции добавляются также в supabase/discussion.sql,
+-- чтобы их можно было применить к уже существующей базе.

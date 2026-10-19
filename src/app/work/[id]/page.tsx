@@ -4,8 +4,10 @@ import Link from "next/link";
 import { ArrowLeft, Calendar, ClipboardList, Hash, Layers } from "lucide-react";
 import { Header } from "@/components/header";
 import { WorkGallery } from "@/components/work-gallery";
+import { Discussion } from "@/components/discussion";
 import { Badge } from "@/components/ui/badge";
 import { getWorkById } from "@/lib/works";
+import { getWorkDiscussion } from "@/lib/discussion";
 import { WORK_TYPE_BADGE_STYLES, type WorkType } from "@/lib/constants";
 
 function formatDate(value: string | null) {
@@ -22,6 +24,8 @@ export default async function WorkPage({ params }: { params: Promise<{ id: strin
   if (!work) {
     notFound();
   }
+
+  const discussion = await getWorkDiscussion(id);
 
   const badgeClass =
     WORK_TYPE_BADGE_STYLES[work.work_type as WorkType] ??
@@ -66,7 +70,11 @@ export default async function WorkPage({ params }: { params: Promise<{ id: strin
           Дата написания: {formatDate(work.test_date)}
         </div>
 
-        <WorkGallery images={work.image_urls} title={work.title} />
+        <WorkGallery
+          variants={work.image_variants?.length ? work.image_variants : [{ variant: 1, image_urls: work.image_urls }]}
+          title={work.title}
+        />
+        <Discussion workId={work.id} {...discussion} />
       </main>
     </>
   );

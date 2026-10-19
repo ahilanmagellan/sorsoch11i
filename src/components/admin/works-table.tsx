@@ -45,7 +45,12 @@ export function WorksTable({ works }: { works: Work[] }) {
               <td className="px-4 py-3 text-neutral-600 dark:text-neutral-300">{work.work_type}</td>
               <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400">{formatDate(work.created_at)}</td>
               <td className="px-4 py-3 text-right">
-                <DeleteWorkButton id={work.id} title={work.title} />
+                <div className="flex items-center justify-end gap-1">
+                  <Link href={`/admin/works/${work.id}`} className="rounded-md px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-500/10">
+                    Изменить
+                  </Link>
+                  <DeleteWorkButton id={work.id} title={work.title} />
+                </div>
               </td>
             </tr>
           ))}
