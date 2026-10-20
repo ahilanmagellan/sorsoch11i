@@ -9,8 +9,8 @@ export function WorkGrid({ works }: { works: Work[] }) {
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
-      {works.map((work, index) => (
-        <WorkCard key={work.id} work={work} index={index} />
+      {works.map((work) => (
+        <WorkCard key={work.id} work={work} />
       ))}
     </div>
   );

@@ -7,7 +7,7 @@ import { getWorks } from "@/lib/works";
 export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
-  const works = await getWorks({});
+  const { works, total } = await getWorks({}, 1, 1000);
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">
@@ -27,7 +27,7 @@ export default async function AdminPage() {
 
       <div>
         <h2 className="mb-3 text-base font-semibold text-neutral-900 dark:text-neutral-100">
-          Загруженные работы ({works.length})
+          Загруженные работы ({total})
         </h2>
         <WorksTable works={works} />
       </div>

@@ -25,32 +25,71 @@ function parseVariantCount(formData: FormData) {
   return { unknown, count, storedCount: unknown ? null : rawCount };
 }
 
-function uploadedFiles(formData: FormData, variant: number) {
-  return formData
-    .getAll(`variant_files_${variant}`)
-    .filter((file): file is File => file instanceof File && file.size > 0);
-}
-
-async function uploadVariantFiles(supabase: ReturnType<typeof createAdminClient>, variant: number, files: File[]) {
-  const imageUrls: string[] = [];
-  for (const file of files) {
-    const rawExtension = file.name.split(".").pop() || "jpg";
-    const extension = /^[a-zA-Z0-9]+$/.test(rawExtension) ? rawExtension.toLowerCase() : "jpg";
-    const path = `${Date.now()}-${nanoid(10)}.${extension}`;
-    const { error } = await supabase.storage.from(WORK_PHOTOS_BUCKET).upload(path, file, {
-      contentType: file.type || "image/jpeg",
-    });
-    if (error) return { error: `Ошибка загрузки фото варианта ${variant}: ${error.message}` };
-    const { data } = supabase.storage.from(WORK_PHOTOS_BUCKET).getPublicUrl(path);
-    imageUrls.push(data.publicUrl);
-  }
-  return { imageUrls };
-}
-
 function getImagePath(url: string) {
   const marker = `/${WORK_PHOTOS_BUCKET}/`;
   const index = url.indexOf(marker);
   return index >= 0 ? url.slice(index + marker.length) : null;
+}
+
+function imageUrlsForVariant(formData: FormData, variant: number) {
+  return formData.getAll(`variant_image_urls_${variant}`).filter((value): value is string => typeof value === "string");
+}
+
+function validPublicImageUrl(value: string) {
+  try {
+    const url = new URL(value);
+    const supabaseUrl = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!);
+    return url.origin === supabaseUrl.origin && getImagePath(value) !== null;
+  } catch {
+    return false;
+  }
+}
+
+const IMAGE_TYPES: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/avif": "avif",
+  "image/gif": "gif",
+  "image/heic": "heic",
+  "image/heif": "heif",
+};
+
+export type SignedWorkImageUpload = { path: string; token: string; publicUrl: string; contentType: string };
+
+export async function prepareWorkImageUploadsAction(
+  files: { contentType: string; fileName: string }[]
+): Promise<{ error?: string; uploads?: SignedWorkImageUpload[] }> {
+  if (!(await hasAdminSession())) return { error: "Требуется вход администратора" };
+  if (!Array.isArray(files) || files.length > 100) return { error: "Можно загрузить не более 100 фото за раз" };
+  if (files.some((file) => !file || typeof file !== "object" || typeof file.contentType !== "string" || typeof file.fileName !== "string")) {
+    return { error: "Некорректные данные фотографий" };
+  }
+
+  const supabase = createAdminClient();
+  const uploads = await Promise.all(files.map(async ({ contentType, fileName }) => {
+    const extension = IMAGE_TYPES[contentType];
+    if (!extension || typeof fileName !== "string" || fileName.length > 255) {
+      return { error: "Поддерживаются только фото JPG, PNG, WebP, AVIF, GIF или HEIC" } as const;
+    }
+
+    const path = `${Date.now()}-${nanoid(12)}.${extension}`;
+    const { data, error } = await supabase.storage.from(WORK_PHOTOS_BUCKET).createSignedUploadUrl(path);
+    if (error) return { error: `Не удалось подготовить загрузку: ${error.message}` } as const;
+
+    const { data: publicData } = supabase.storage.from(WORK_PHOTOS_BUCKET).getPublicUrl(path);
+    return { upload: { path: data.path, token: data.token, publicUrl: publicData.publicUrl, contentType } } as const;
+  }));
+
+  const error = uploads.find((result) => "error" in result);
+  if (error && "error" in error) return { error: error.error };
+  return { uploads: uploads.map((result) => ("upload" in result ? result.upload : null)).filter((item): item is SignedWorkImageUpload => item !== null) };
+}
+
+export async function cleanupWorkImageUploadsAction(urls: string[]) {
+  if (!(await hasAdminSession()) || !Array.isArray(urls) || urls.length > 100) return;
+  const paths = urls.filter((url) => typeof url === "string").map(getImagePath).filter((path): path is string => Boolean(path));
+  if (paths.length) await createAdminClient().storage.from(WORK_PHOTOS_BUCKET).remove(paths);
 }
 
 export type ActionState = { error?: string } | null;
@@ -121,9 +160,9 @@ export async function createWorkAction(
   const supabase = createAdminClient();
   const imageVariants: ImageVariant[] = [];
   for (let variant = 1; variant <= variantCount.count; variant += 1) {
-    const uploaded = await uploadVariantFiles(supabase, variant, uploadedFiles(formData, variant));
-    if (uploaded.error) return { error: uploaded.error };
-    imageVariants.push({ variant, image_urls: uploaded.imageUrls ?? [] });
+    const urls = imageUrlsForVariant(formData, variant);
+    if (urls.some((url) => !validPublicImageUrl(url))) return { error: "Недопустимая ссылка на фото" };
+    imageVariants.push({ variant, image_urls: urls });
   }
 
   const imageUrls = imageVariants.flatMap((item) => item.image_urls);
@@ -221,9 +260,9 @@ export async function updateWorkAction(id: string, formData: FormData) {
   }
 
   for (let variant = 1; variant <= variantCount.count; variant += 1) {
-    const uploaded = await uploadVariantFiles(supabase, variant, uploadedFiles(formData, variant));
-    if (uploaded.error) return { error: uploaded.error };
-    imageVariants[variant - 1].image_urls.push(...(uploaded.imageUrls ?? []));
+    const urls = imageUrlsForVariant(formData, variant);
+    if (urls.some((url) => !validPublicImageUrl(url))) return { error: "Недопустимая ссылка на фото" };
+    imageVariants[variant - 1].image_urls.push(...urls);
   }
 
   const imageUrls = imageVariants.flatMap((item) => item.image_urls);

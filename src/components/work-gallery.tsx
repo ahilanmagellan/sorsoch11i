@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import Image from "next/image";
-import JSZip from "jszip";
 import { toast } from "sonner";
 import {
   ChevronLeft,
@@ -61,6 +60,7 @@ async function shareOrDownload(files: File[], zipName: string) {
   if (files.length === 1) {
     triggerDownload(files[0], files[0].name);
   } else {
+    const { default: JSZip } = await import("jszip");
     const zip = new JSZip();
     files.forEach((file) => zip.file(file.name, file));
     const zipBlob = await zip.generateAsync({ type: "blob" });

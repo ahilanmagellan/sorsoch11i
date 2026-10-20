@@ -7,6 +7,12 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { updateWorkAction } from "@/app/admin/actions";
 import { createAdminCommentAction } from "@/app/work/[id]/actions";
+import {
+  addUploadedImagesToFormData,
+  cleanupUploadedWorkImages,
+  uploadSelectedWorkImages,
+  type UploadedWorkImages,
+} from "@/lib/admin-image-upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -29,6 +35,7 @@ export function EditWorkForm({ work }: { work: Work }) {
   const [variantCount, setVariantCount] = useState(String(work.variants_count ?? highestVariant));
   const [variantSlots, setVariantSlots] = useState(Math.max(highestVariant, work.variants_count ?? 1));
   const [maxScoreUnknown, setMaxScoreUnknown] = useState(work.max_score === null);
+  const [uploadProgress, setUploadProgress] = useState("");
   const shownVariantCount = variantsUnknown
     ? variantSlots
     : Math.max(Number(variantCount) || 0, highestPhotoVariant);
@@ -39,23 +46,44 @@ export function EditWorkForm({ work }: { work: Work }) {
     const formData = new FormData(formElement);
     const adminComment = String(formData.get("admin_comment") ?? "").trim();
     startTransition(async () => {
-      const result = await updateWorkAction(work.id, formData);
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      if (adminComment) {
-        const commentResult = await createAdminCommentAction(work.id, adminComment);
-        if (commentResult.error) {
-          toast.error(`Работа сохранена, но комментарий не добавлен: ${commentResult.error}`);
-          router.refresh();
+      let uploadedImages: UploadedWorkImages = {};
+      let workSaved = false;
+      try {
+        const fileInputs = Array.from(formElement.querySelectorAll<HTMLInputElement>('input[type="file"][name^="variant_files_"]'));
+        const selected = fileInputs.flatMap((input) => {
+          const variant = Number(input.name.match(/variant_files_(\d+)/)?.[1]);
+          return variant ? Array.from(input.files ?? []).map((file) => ({ variant, file })) : [];
+        });
+        uploadedImages = await uploadSelectedWorkImages(selected, setUploadProgress);
+        fileInputs.forEach((input) => formData.delete(input.name));
+        addUploadedImagesToFormData(formData, uploadedImages);
+
+        const result = await updateWorkAction(work.id, formData);
+        if (result.error) {
+          await cleanupUploadedWorkImages(uploadedImages);
+          toast.error(result.error);
           return;
         }
-        const commentField = formElement.elements.namedItem("admin_comment");
-        if (commentField instanceof HTMLTextAreaElement) commentField.value = "";
+        workSaved = true;
+
+        if (adminComment) {
+          const commentResult = await createAdminCommentAction(work.id, adminComment);
+          if (commentResult.error) {
+            toast.error(`Работа сохранена, но комментарий не добавлен: ${commentResult.error}`);
+            router.refresh();
+            return;
+          }
+          const commentField = formElement.elements.namedItem("admin_comment");
+          if (commentField instanceof HTMLTextAreaElement) commentField.value = "";
+        }
+        toast.success(adminComment ? "Изменения сохранены, комментарий администратора опубликован" : "Изменения сохранены");
+        router.refresh();
+      } catch (error) {
+        if (!workSaved && Object.keys(uploadedImages).length) await cleanupUploadedWorkImages(uploadedImages);
+        toast.error(error instanceof Error ? error.message : "Не удалось сохранить работу. Попробуйте ещё раз.");
+      } finally {
+        setUploadProgress("");
       }
-      toast.success(adminComment ? "Изменения сохранены, комментарий администратора опубликован" : "Изменения сохранены");
-      router.refresh();
     });
   }
 
@@ -184,7 +212,7 @@ export function EditWorkForm({ work }: { work: Work }) {
 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={() => router.push("/admin")}>Отмена</Button>
-        <Button type="submit" disabled={pending}>{pending ? "Сохранение..." : "Сохранить изменения"}</Button>
+        <Button type="submit" disabled={pending}>{pending ? uploadProgress || "Сохранение..." : "Сохранить изменения"}</Button>
       </div>
     </form>
   );

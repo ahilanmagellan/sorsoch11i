@@ -8,6 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { SUBJECTS, QUARTERS, WORK_TYPES } from "@/lib/constants";
+import {
+  addUploadedImagesToFormData,
+  cleanupUploadedWorkImages,
+  uploadSelectedWorkImages,
+  type UploadedWorkImages,
+} from "@/lib/admin-image-upload";
 
 export function UploadForm() {
   const [pending, startTransition] = useTransition();
@@ -16,22 +22,43 @@ export function UploadForm() {
   const [variantsUnknown, setVariantsUnknown] = useState(false);
   const [variantCount, setVariantCount] = useState("");
   const [variantSlots, setVariantSlots] = useState(1);
+  const [uploadProgress, setUploadProgress] = useState("");
   const shownVariantCount = variantsUnknown ? variantSlots : Number(variantCount) || 0;
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     startTransition(async () => {
-      const result = await createWorkAction(null, formData);
-      if (result?.success) {
-        toast.success("Работа успешно добавлена");
-        formRef.current?.reset();
-        setMaxScoreUnknown(false);
-        setVariantsUnknown(false);
-        setVariantCount("");
-        setVariantSlots(1);
-      } else if (result?.error) {
-        toast.error(result.error);
+      let uploadedImages: UploadedWorkImages = {};
+      try {
+        const fileInputs = Array.from(formRef.current?.querySelectorAll<HTMLInputElement>('input[type="file"][name^="variant_files_"]') ?? []);
+        const selected = fileInputs.flatMap((input) => {
+          const variant = Number(input.name.match(/variant_files_(\d+)/)?.[1]);
+          return variant ? Array.from(input.files ?? []).map((file) => ({ variant, file })) : [];
+        });
+        uploadedImages = await uploadSelectedWorkImages(selected, setUploadProgress);
+        fileInputs.forEach((input) => formData.delete(input.name));
+        addUploadedImagesToFormData(formData, uploadedImages);
+
+        const result = await createWorkAction(null, formData);
+        if (result?.error) {
+          await cleanupUploadedWorkImages(uploadedImages);
+          toast.error(result.error);
+          return;
+        }
+        if (result?.success) {
+          toast.success("Работа успешно добавлена");
+          formRef.current?.reset();
+          setMaxScoreUnknown(false);
+          setVariantsUnknown(false);
+          setVariantCount("");
+          setVariantSlots(1);
+        }
+      } catch (error) {
+        if (Object.keys(uploadedImages).length) await cleanupUploadedWorkImages(uploadedImages);
+        toast.error(error instanceof Error ? error.message : "Не удалось загрузить работу. Попробуйте ещё раз.");
+      } finally {
+        setUploadProgress("");
       }
     });
   }
@@ -138,7 +165,7 @@ export function UploadForm() {
       )}
 
       <Button type="submit" disabled={pending}>
-        {pending ? "Загрузка..." : "Сохранить работу"}
+        {pending ? uploadProgress || "Сохранение..." : "Сохранить работу"}
       </Button>
     </form>
   );

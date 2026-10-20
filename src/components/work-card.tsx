@@ -1,8 +1,5 @@
-"use client";
-
 import Image from "next/image";
 import Link from "next/link";
-import { motion } from "framer-motion";
 import { ImageIcon, Calendar } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { WORK_TYPE_BADGE_STYLES, type WorkType } from "@/lib/constants";
@@ -15,7 +12,7 @@ function formatDate(value: string | null) {
   );
 }
 
-export function WorkCard({ work, index = 0 }: { work: Work; index?: number }) {
+export function WorkCard({ work }: { work: Work }) {
   const cover = work.image_urls?.[0];
   const date = formatDate(work.test_date);
   const badgeClass =
@@ -23,11 +20,7 @@ export function WorkCard({ work, index = 0 }: { work: Work; index?: number }) {
     "bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300";
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay: Math.min(index, 8) * 0.04 }}
-    >
+    <div>
       <Link
         href={`/work/${work.id}`}
         className="group flex h-full flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm transition-shadow hover:shadow-md dark:border-neutral-800 dark:bg-neutral-900"
@@ -64,6 +57,6 @@ export function WorkCard({ work, index = 0 }: { work: Work; index?: number }) {
           ) : null}
         </div>
       </Link>
-    </motion.div>
+    </div>
   );
 }
